@@ -156,7 +156,7 @@ static int bh, obh, wx, wy, ww, wh, vbh;
 static unsigned int numlockmask;
 static Bool running = True, nextfocus, doinitspawn = True,
             fillagain = False, closelastclient = False,
-            killclientsfirst = False, autoHide = False;
+            killclientsfirst = False, autoHide = False, stacked = False;
 static Display *dpy;
 static DC dc;
 static Atom wmatom[WMLast];
@@ -189,7 +189,7 @@ buttonpress(const XEvent *e)
 		return;
 
 	for (i = fc; i < nclients; i++) {
-		if (clients[i]->tabx > ev->x) {
+		if (clients[i]->tabx > (stacked ? ev->y : ev->x)) {
 			switch (ev->button) {
 			case Button1:
 				focus(i);
@@ -321,6 +321,60 @@ die(const char *errstr, ...)
 }
 
 void
+drawstack(void)
+{
+	XftColor *col;
+	int c, cc, fc, width, nbh, i;
+	char *name = NULL;
+
+	cc = wh / 2 / vbh;
+
+	nbh = MIN(nclients, cc) * vbh;
+	if (bh != nbh) {
+		bh = nbh;
+		for (i = 0; i < nclients; i++)
+			XMoveResizeWindow(dpy, clients[i]->win, 0, bh, ww, wh - bh);
+		}
+	if (bh == 0)
+		return;
+
+	width = ww;
+	fc = getfirsttab();
+	dc.x = dc.y = 0;
+
+	if (fc > 0) {
+		dc.w = TEXTW(before);
+		drawtext(before, dc.sel);
+		dc.x += dc.w;
+		width -= dc.w;
+	}
+
+	cc = MIN(cc, nclients);
+	for (c = fc; c < fc + cc; c++) {
+		if (c == fc + cc - 1 && fc + cc < nclients)
+		{
+			int prevx = dc.x;
+			dc.w = TEXTW(after);
+			dc.x = ww - dc.w;
+			drawtext(after, dc.sel);
+			dc.x = prevx;
+			width -= dc.w;
+		}
+		dc.w = width;
+		col = (c == sel) ? dc.sel :
+		    clients[c]->urgent ? dc.urg : dc.norm;
+		drawtext(clients[c]->name, col);
+		dc.x = 0;
+		dc.y += vbh;
+		width = ww;
+		clients[c]->tabx = dc.y;
+	}
+	dc.y = 0;
+	XCopyArea(dpy, dc.drawable, win, dc.gc, 0, 0, ww, bh, 0, 0);
+	XSync(dpy, False);
+}
+
+void
 drawbar(void)
 {
 	XftColor *col;
@@ -335,6 +389,11 @@ drawbar(void)
 		XCopyArea(dpy, dc.drawable, win, dc.gc, 0, 0, ww, vbh, 0, 0);
 		XSync(dpy, False);
 
+		return;
+	}
+
+	if (stacked) {
+		drawstack();
 		return;
 	}
 
@@ -598,9 +657,13 @@ getfirsttab(void)
 	if (sel < 0)
 		return 0;
 
-	cc = ww / tabwidth;
-	if (nclients > cc)
-		cc = (ww - TEXTW(before) - TEXTW(after)) / tabwidth;
+	if (stacked) {
+		cc = wh / 2 / vbh;
+	} else {
+		cc = ww / tabwidth;
+		if (nclients > cc)
+			cc = (ww - TEXTW(before) - TEXTW(after)) / tabwidth;
+	}
 
 	ret = sel - cc / 2 + (cc + 1) % 2;
 	return ret < 0 ? 0 :
@@ -1329,6 +1392,9 @@ main(int argc, char *argv[])
 		break;
 	case 'r':
 		replace = atoi(EARGF(usage()));
+		break;
+	case 'S':
+		stacked = True;
 		break;
 	case 's':
 		doinitspawn = False;
