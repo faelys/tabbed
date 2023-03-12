@@ -156,7 +156,7 @@ static int bh, obh, wx, wy, ww, wh, vbh;
 static unsigned int numlockmask;
 static Bool running = True, nextfocus, doinitspawn = True,
             fillagain = False, closelastclient = False,
-            killclientsfirst = False;
+            killclientsfirst = False, autoHide = False;
 static Display *dpy;
 static DC dc;
 static Atom wmatom[WMLast];
@@ -338,7 +338,7 @@ drawbar(void)
 		return;
 	}
 
-	nbh = nclients > 1 ? vbh : 0;
+	nbh = (!autoHide || nclients > 1) ? vbh : 0;
 	if (bh != nbh) {
 		bh = nbh;
 		for (i = 0; i < nclients; i++)
@@ -1283,7 +1283,7 @@ xsettitle(Window w, const char *str)
 void
 usage(void)
 {
-	die("usage: %s [-dfksv] [-g geometry] [-n name] [-p [s+/-]pos]\n"
+	die("usage: %s [-adfksv] [-g geometry] [-n name] [-p [s+/-]pos]\n"
 	    "       [-r narg] [-o color] [-O color] [-t color] [-T color]\n"
 	    "       [-u color] [-U color] command...\n", argv0);
 }
@@ -1296,6 +1296,9 @@ main(int argc, char *argv[])
 	char *pstr;
 
 	ARGBEGIN {
+	case 'a':
+		autoHide = True;
+		break;
 	case 'c':
 		closelastclient = True;
 		fillagain = False;
